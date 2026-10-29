@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>West Marine #1299 - Rigging Service App</title>
+  <!-- HTML5 QR/Barcode Scanner Library -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    :root {
+      --wm-blue: #003366;
+      --border-color: #222;
+    }
+    * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+    body { margin: 0; padding: 12px; background: #f0f2f5; color: #111; }
+
+    /* Control Panel (Hidden when printing) */
+    .app-controls {
+      max-width: 850px;
+      margin: 0 auto 16px auto;
+      background: #fff;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    }
+    .app-controls h3 { margin: 0 0 12px 0; color: var(--wm-blue); }
+    .scanner-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .scanner-row input {
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    .sku-input { flex: 2; min-width: 160px; }
+    .qty-input { width: 80px; }
+    button {
+      padding: 10px 14px;
+      font-size: 15px;
+      font-weight: bold;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      background: var(--wm-blue);
+      color: white;
+    }
+    button.secondary { background: #555; }
+    button.success { background: #1b873f; }
+    #reader {
+      width: 100%;
+      max-width: 400px;
+      margin: 12px auto 0 auto;
+      display: none;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .status-msg {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #444;
+    }
+
+    /* Printable Rigging Form */
+    .form-sheet {
+      max-width: 850px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 24px;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .form-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+    }
+    .brand-title {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+    }
+    .brand-title h1 {
+      margin: 0;
+      font-size: 28px;
+      color: var(--wm-blue);
+      letter-spacing: -0.5px;
+    }
+    .brand-title h2 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: bold;
+    }
+    .store-info {
+      text-align: right;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    /* Top Metadata Fields */
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr;
+      gap: 8px 16px;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .field-line {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .field-line label {
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .field-line input {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid #333;
+      font-size: 13px;
+      padding: 2px 4px;
+      outline: none;
+    }
+    .notes-area {
+      margin-top: 6px;
+      border: 1px solid var(--border-color);
+      padding: 6px;
+    }
+    .notes-area label {
+      font-size: 12px;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .notes-area textarea {
+      width: 100%;
+      height: 48px;
+      border: none;
+      resize: vertical;
+      font-size: 13px;
+      outline: none;
+    }
+    .store-note {
+      font-size: 11px;
+      font-style: italic;
+      margin: 4px 0 8px 0;
+    }
+
+    /* SKU Table */
+    table.rigging-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+    }
+    table.rigging-table th,
+    table.rigging-table td {
+      border: 1px solid var(--border-color);
+      padding: 4px 6px;
+      font-size: 13px;
+    }
+    table.rigging-table th {
+      background: #f4f4f4;
+      text-align: center;
+      font-weight: bold;
+    }
+    table.rigging-table td input {
+      width: 100%;
+      border: none;
+      font-size: 13px;
+      padding: 2px;
+      outline: none;
+      background: transparent;
+    }
+    .col-sku { width: 16%; }
+    .col-desc { width: 48%; }
+    .col-qty { width: 10%; text-align: center; }
+    .col-cost { width: 13%; text-align: right; }
+    .col-ext { width: 13%; text-align: right; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+
+    .total-label {
+      text-align: right;
+      font-weight: bold;
+      font-size: 15px;
+      padding-right: 10px;
+    }
+    .total-val {
+      font-weight: bold;
+      font-size: 15px;
+      text-align: right;
+    }
+
+    /* Footer Fields */
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 1fr;
+      gap: 10px 16px;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    @media print {
+      body { background: #fff; padding: 0; }
+      .app-controls { display: none !important; }
+      .form-sheet { border: none; box-shadow: none; padding: 0; max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SCANNER & LOOKUP CONTROLS -->
+  <div class="app-controls">
+    <h3>Barcode Scanner & SKU Auto-Fill</h3>
+    <div class="scanner-row">
+      <input type="text" id="scanSkuInput" class="sku-input" placeholder="Scan or type SKU (e.g. 8673758)..." autofocus>
+      <input type="number" id="scanQtyInput" class="qty-input" value="1" min="1" step="1" placeholder="Qty">
+      <button onclick="handleAddSku()">+ Add SKU</button>
+      <button class="secondary" onclick="toggleCamera()">📷 Camera Scan</button>
+      <button class="success" onclick="window.print()">🖨️ Print / PDF</button>
+    </div>
+    <div id="reader"></div>
+    <div id="statusMsg" class="status-msg">Ready. Scan a barcode from your sheet or enter a West Marine SKU.</div>
+  </div>
+
+  <!-- WEST MARINE RIGGING SERVICE FORM -->
+  <div class="form-sheet">
+    <div class="form-header">
+      <div class="brand-title">
+        <h1>West Marine®</h1>
+        <h2>Rigging Service</h2>
+      </div>
+      <div class="store-info">
+        <strong>West Marine Sausalito #1299</strong><br>
+        192 Donahue St.<br>
+        Sausalito, CA 94965<br>
+        Phone: (415) 289-0835<br>
+        Email: wmriggingsausalito@westmarine.com
+      </div>
+    </div>
+
+    <div class="meta-grid">
+      <div class="field-line">
+        <label><input type="checkbox" style="width:auto"> Order</label>
+        <label style="margin-left:12px"><input type="checkbox" style="width:auto"> Quote</label>
+      </div>
+      <div></div>
+      <div></div>
+
+      <div class="field-line">
+        <label>Receiving Associate:</label>
+        <input type="text">
+      </div>
+      <div class="field-line">
+        <label>Date Received:</label>
+        <input type="text" id="dateReceived">
+      </div>
+      <div class="field-line">
+        <label>Order Code:</label>
+        <input type="text">
+      </div>
+
+      <div class="field-line" style="grid-column: span 1;">
+        <label>Customer Name:</label>
+        <input type="text">
+      </div>
+      <div class="field-line" style="grid-column: span 2;">
+        <label>Email:</label>
+        <input type="email">
+      </div>
+
+      <div class="field-line">
+        <label>Daytime Phone:</label>
+        <input type="text">
+      </div>
+      <div class="field-line" style="grid-column: span 2;">
+        <label>Model/Size Boat:</label>
+        <input type="text">
+      </div>
+    </div>
+
+    <div class="notes-area">
+      <label>Notes/Instructions:</label>
+      <textarea></textarea>
+    </div>
+    <div class="store-note">(Above portion to be completed by store sending order)</div>
+
+    <table class="rigging-table" id="skuTable">
+      <thead>
+        <tr>
+          <th class="col-sku">SKU</th>
+          <th class="col-desc">Description</th>
+          <th class="col-qty">Qty.</th>
+          <th class="col-cost">Cost Ea.</th>
+          <th class="col-ext">Cost Extd.</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        <!-- 24 standard rows matching physical sheet -->
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="4" class="total-label">Total:</td>
+          <td class="total-val" id="grandTotal">$0.00</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="footer-grid">
+      <div class="field-line">
+        <label>Order Completed by:</label>
+        <input type="text">
+      </div>
+      <div class="field-line">
+        <label>Ship date:</label>
+        <input type="text">
+      </div>
+      <div class="field-line">
+        <label>Shipped via:</label>
+        <input type="text">
+      </div>
+      <div class="field-line">
+        <label>Tracking #:</label>
+        <input type="text">
+      </div>
+      <div class="field-line" style="grid-column: span 2;">
+        <label>TRF#:</label>
+        <input type="text">
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Pre-loaded database from your binder barcode sheets + ability to add more
+    const BINDER_CATALOG = {
+      "8673758": { desc: "Line-Dinghy 8Plait SCRd 5MM/Ft (ROBLN 8P-5R)", price: 0.99 },
+      "8673782": { desc: "Line-Dinghy Cont CC Bl 3MM/Ft (ROBLN DC-3BLU)", price: 0.89 },
+      "8673816": { desc: "Line-Dinghy Cont CC Bl 4MM/Ft (ROBLN DC-4BLU)", price: 1.09 },
+      "8673873": { desc: "Line-Dinghy Cont CC Grn 4MM/Ft (ROBLN DC-4GRN)", price: 1.09 },
+      "8673881": { desc: "Line-Dinghy Cont CC Grn 5MM/Ft (ROBLN DC-5GRN)", price: 1.79 },
+      "8673899": { desc: "Line-Dinghy Cont CC Rd 5MM/Ft (ROBLN DC-5R)", price: 1.79 },
+      "8673857": { desc: "Line-Dinghy Cont CC Rd 6MM/Ft (ROBLN DC-6R)", price: 2.49 },
+      "8673907": { desc: "Line-Dinghy Anti Kink 7MMOr/Ft (ROBLN DS-7)", price: 1.89 },
+      "17870913": { desc: "Line-CoPolyester Spool 2MM (ROBLN)", price: 2.09 },
+      "9486358": { desc: "Twine-Whipping Waxd #2 Wh", price: 9.99 },
+      "20002531": { desc: "Twine-Whipping Waxd #4 Wh", price: 13.39 },
+      "8673956": { desc: "Line-Polyester Spool 3mm Bk (ROBLN MR-3BLK)", price: 25.39 },
+      "8673931": { desc: "Line-Polyester Spool 3mm Wh", price: 25.39 },
+      "15337272": { desc: "Shockcord 3/8\" Ft", price: 37.19 },
+      "142604": { desc: "Line Hanger-Shockcord (2) (RONST RF6010C)", price: 9.99 },
+      "11819760": { desc: "Snap Shackle-FixedB 165lb", price: 33.99 },
+      "120956": { desc: "Rep Kit-Snap Shackle 1000lb (RONST)", price: 26.99 },
+      "179671": { desc: "Shackle-D Std 5/32 (WICHD 1201W)", price: 17.99 },
+      "179689": { desc: "Shackle-D Std 3/16 (WICHD)", price: 18.99 },
+      "116087": { desc: "Snap Safety Hook SS 3in 1700# (WICHD 2481W)", price: 64.99 },
+      "11850351": { desc: "Wedge-Cam 1\" Cleat Sml Bk", price: 13.99 },
+      "120980": { desc: "Boom Bail-SS V 35x12 D (RONST RF1082-35)", price: 15.99 },
+      "129262": { desc: "Slide-Genoa Ring 1-1/4 Track (RONST RF737243)", price: 194.99 },
+      "544866": { desc: "Block-29mm Sgl Lead (RONST RF919)", price: 46.99 },
+      "14433676": { desc: "Block-Sheaveless 3/16 Gry (2) (RONST RF809GRY-2)", price: 26.99 },
+      "10468569": { desc: "Block-Srs 60 Orbit SglSwvShk (RONST RF55140)", price: 40.99 },
+      "271739": { desc: "Block-S40 Single Stand Up (RONST RF41140)", price: 45.99 },
+      "11840014": { desc: "Block-S75 Core Single (RONST RF74100)", price: 192.99 },
+      "120469": { desc: "Block-Snatch 45MM Std HS (RONST RF6730)", price: 364.99 },
+      "9486226": { desc: "Line-Dyneema S78 Double 120mm (ROBLN)", price: 21.99 },
+      "285207": { desc: "Eye Bolt-SS 1/4x1-1/2 (WICHD 6490W)", price: 39.99 },
+      "285215": { desc: "Eye Bolt-SS 1/4x3-3/8 (WICHD 6491W)", price: 44.99 }
+    };
+
+    const TOTAL_ROWS = 24;
+    const tbody = document.getElementById("tableBody");
+    document.getElementById("dateReceived").value = new Date().toLocaleDateString();
+
+    // Initialize 24 blank rows matching paper form
+    for (let i = 0; i < TOTAL_ROWS; i++) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><input type="text" class="row-sku" onchange="lookupRowSku(${i})" placeholder=""></td>
+        <td><input type="text" class="row-desc"></td>
+        <td><input type="number" class="row-qty text-center" step="any" oninput="recalcTable()"></td>
+        <td><input type="number" class="row-cost text-right" step="0.01" oninput="recalcTable()"></td>
+        <td class="row-ext text-right"></td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    // Enter key support on SKU input
+    document.getElementById("scanSkuInput").addEventListener("keydown", function(e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAddSku();
+      }
+    });
+
+    async function fetchProductData(sku) {
+      const cleanSku = sku.trim();
+      // 1. Check local binder catalog first
+      if (BINDER_CATALOG[cleanSku]) {
+        return BINDER_CATALOG[cleanSku];
+      }
+
+      // 2. Try live lookup from WestMarine.com via public CORS proxy
+      const status = document.getElementById("statusMsg");
+      status.textContent = `Searching westmarine.com for SKU ${cleanSku}...`;
+      try {
+        const targetUrl = `https://www.westmarine.com/search?q=${encodeURIComponent(cleanSku)}`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+        const res = await fetch(proxyUrl);
+        const data = await res.json();
+        if (data && data.contents) {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(data.contents, "text/html");
+
+          const titleEl = doc.querySelector("h1.product-name, .pdp-link a, .product-tile .link, meta[property='og:title']");
+          const priceEl = doc.querySelector(".price .value, .sales .value, [itemprop='price']");
+
+          let desc = titleEl ? (titleEl.content || titleEl.textContent).trim() : "";
+          desc = desc.replace(/\| West Marine.*/i, "").trim();
+
+          let price = 0;
+          if (priceEl) {
+            const rawPrice = priceEl.getAttribute("content") || priceEl.textContent;
+            const match = rawPrice.match(/[\d,.]+/);
+            if (match) price = parseFloat(match[0].replace(/,/g, ""));
+          }
+
+          if (desc) {
+            BINDER_CATALOG[cleanSku] = { desc, price };
+            return BINDER_CATALOG[cleanSku];
+          }
+        }
+      } catch (err) {
+        console.warn("Live lookup fallback:", err);
+      }
+      return null;
+    }
+
+    async function handleAddSku() {
+      const skuEl = document.getElementById("scanSkuInput");
+      const qtyEl = document.getElementById("scanQtyInput");
+      const sku = skuEl.value.trim();
+      const qty = parseFloat(qtyEl.value) || 1;
+
+      if (!sku) return;
+
+      const rows = tbody.querySelectorAll("tr");
+      let targetRow = null;
+
+      // Check if SKU already exists on sheet to increment Qty, or find first empty row
+      for (const row of rows) {
+        const rSku = row.querySelector(".row-sku").value.trim();
+        if (rSku === sku) {
+          const rQty = row.querySelector(".row-qty");
+          rQty.value = (parseFloat(rQty.value) || 0) + qty;
+          recalcTable();
+          skuEl.value = "";
+          skuEl.focus();
+          document.getElementById("statusMsg").textContent = `Updated quantity for SKU ${sku}.`;
+          return;
+        }
+        if (!rSku && !targetRow) {
+          targetRow = row;
+        }
+      }
+
+      if (!targetRow) {
+        alert("All rows are full!");
+        return;
+      }
+
+      targetRow.querySelector(".row-sku").value = sku;
+      targetRow.querySelector(".row-qty").value = qty;
+
+      const item = await fetchProductData(sku);
+      if (item) {
+        targetRow.querySelector(".row-desc").value = item.desc;
+        targetRow.querySelector(".row-cost").value = item.price.toFixed(2);
+        document.getElementById("statusMsg").textContent = `Added: ${sku} — ${item.desc} ($${item.price.toFixed(2)})`;
+      } else {
+        targetRow.querySelector(".row-desc").placeholder = "Enter description manually";
+        document.getElementById("statusMsg").textContent = `SKU ${sku} added. Type description & price if not auto-found.`;
+      }
+
+      recalcTable();
+      skuEl.value = "";
+      qtyEl.value = "1";
+      skuEl.focus();
+    }
+
+    async function lookupRowSku(rowIndex) {
+      const row = tbody.querySelectorAll("tr")[rowIndex];
+      const sku = row.querySelector(".row-sku").value.trim();
+      if (!sku) {
+        recalcTable();
+        return;
+      }
+      if (!row.querySelector(".row-qty").value) {
+        row.querySelector(".row-qty").value = 1;
+      }
+      const item = await fetchProductData(sku);
+      if (item) {
+        row.querySelector(".row-desc").value = item.desc;
+        row.querySelector(".row-cost").value = item.price.toFixed(2);
+      }
+      recalcTable();
+    }
+
+    function recalcTable() {
+      let grandTotal = 0;
+      const rows = tbody.querySelectorAll("tr");
+      rows.forEach(row => {
+        const qty = parseFloat(row.querySelector(".row-qty").value);
+        const cost = parseFloat(row.querySelector(".row-cost").value);
+        const extCell = row.querySelector(".row-ext");
+        if (!isNaN(qty) && !isNaN(cost)) {
+          const ext = qty * cost;
+          extCell.textContent = ext.toFixed(2);
+          grandTotal += ext;
+        } else {
+          extCell.textContent = "";
+        }
+      });
+      document.getElementById("grandTotal").textContent = "$" + grandTotal.toFixed(2);
+    }
+
+    // Camera Barcode Scanner
+    let html5QrCode = null;
+    let cameraActive = false;
+
+    function toggleCamera() {
+      const readerDiv = document.getElementById("reader");
+      if (cameraActive) {
+        html5QrCode.stop().then(() => {
+          readerDiv.style.display = "none";
+          cameraActive = false;
+        });
+        return;
+      }
+
+      readerDiv.style.display = "block";
+      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 260, height: 100 } },
+        (decodedText) => {
+          document.getElementById("scanSkuInput").value = decodedText.trim();
+          handleAddSku();
+        },
+        () => {}
+      ).then(() => {
+        cameraActive = true;
+      }).catch(err => {
+        alert("Camera error (ensure HTTPS or localhost): " + err);
+        readerDiv.style.display = "none";
+      });
+    }
+  </script>
+</body>
+</html>
